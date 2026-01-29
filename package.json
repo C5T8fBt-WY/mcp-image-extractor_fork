@@ -1,13 +1,15 @@
 {
-  "name": "mcp-image-extractor",
-  "version": "1.1.0",
-  "description": "MCP server for extracting and converting images to base64 for LLM analysis",
+  "name": "@c5t8fbt-wy/mcp-image-extractor",
+  "version": "1.2.0",
+  "description": "Enhanced MCP server for extracting and converting images to base64 for LLM analysis with configurable quality settings",
   "main": "dist/index.js",
   "bin": {
     "mcp-image-extractor": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc && node -e \"require('fs').chmodSync('dist/index.js', '755')\"",
@@ -24,9 +26,12 @@
     "image",
     "base64",
     "llm",
-    "smithery"
+    "smithery",
+    "image-processing",
+    "sharp",
+    "configurable"
   ],
-  "author": "",
+  "author": "C5T8fBt-WY",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.6.1",
@@ -52,21 +57,25 @@
     "typescript": "^5.3.2"
   },
   "smithery": {
-    "name": "mcp-image-extractor",
-    "description": "MCP server for extracting and converting images to base64 for LLM analysis",
-    "version": "1.1.0",
-    "author": "",
+    "name": "@c5t8fbt-wy/mcp-image-extractor",
+    "description": "Enhanced MCP server for extracting and converting images to base64 for LLM analysis",
+    "version": "1.2.0",
+    "author": "C5T8fBt-WY",
     "license": "MIT"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/ifmelate/mcp-image-extractor"
+    "url": "https://github.com/C5T8fBt-WY/mcp-image-extractor_fork"
   },
-  "homepage": "https://github.com/ifmelate/mcp-image-extractor#readme",
+  "homepage": "https://github.com/C5T8fBt-WY/mcp-image-extractor_fork#readme",
   "bugs": {
-    "url": "https://github.com/ifmelate/mcp-image-extractor/issues"
+    "url": "https://github.com/C5T8fBt-WY/mcp-image-extractor_fork/issues"
   },
   "engines": {
     "node": ">=16.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

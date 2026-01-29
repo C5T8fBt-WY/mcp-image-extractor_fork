@@ -4,25 +4,31 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // Configuration
-const MAX_IMAGE_SIZE = parseInt(process.env.MAX_IMAGE_SIZE || '10485760', 10); // 10MB default
+const MAX_IMAGE_SIZE = parseInt(process.env.MAX_IMAGE_SIZE || '52428800', 10); // 50MB default (increased from 10MB)
 const ALLOWED_DOMAINS = process.env.ALLOWED_DOMAINS ? process.env.ALLOWED_DOMAINS.split(',') : [];
 
-// Default max dimensions for optimal LLM context usage
-const DEFAULT_MAX_WIDTH = 512;
-const DEFAULT_MAX_HEIGHT = 512;
+// Default max dimensions for optimal LLM context usage (can be overridden via env vars)
+const DEFAULT_MAX_WIDTH = parseInt(process.env.DEFAULT_MAX_WIDTH || '512', 10);
+const DEFAULT_MAX_HEIGHT = parseInt(process.env.DEFAULT_MAX_HEIGHT || '512', 10);
 
-// Compression configuration based on format - new addition
+// Compression quality (can be overridden via env var, 1-100, higher = better quality but larger file)
+const COMPRESSION_QUALITY = parseInt(process.env.COMPRESSION_QUALITY || '80', 10);
+
+// PNG compression level (can be overridden via env var, 0-9, higher = smaller file but slower)
+const PNG_COMPRESSION_LEVEL = parseInt(process.env.PNG_COMPRESSION_LEVEL || '9', 10);
+
+// Compression configuration based on format
 type SupportedFormat = 'jpeg' | 'jpg' | 'png' | 'webp' | 'gif' | 'svg' | 'avif' | 'tiff';
 
 const COMPRESSION_OPTIONS: Record<SupportedFormat, object> = {
-  jpeg: { quality: 80 },
-  jpg: { quality: 80 },
-  png: { quality: 80, compressionLevel: 9 },
-  webp: { quality: 80 },
-  gif: { },
-  svg: { },
-  avif: { quality: 80 },
-  tiff: { quality: 80 }
+  jpeg: { quality: COMPRESSION_QUALITY },
+  jpg: { quality: COMPRESSION_QUALITY },
+  png: { quality: COMPRESSION_QUALITY, compressionLevel: PNG_COMPRESSION_LEVEL },
+  webp: { quality: COMPRESSION_QUALITY },
+  gif: {},
+  svg: {},
+  avif: { quality: COMPRESSION_QUALITY },
+  tiff: { quality: COMPRESSION_QUALITY }
 };
 
 // Type definitions
@@ -54,21 +60,21 @@ export type McpToolResponse = {
   content: (
     | { [x: string]: unknown; type: "text"; text: string; }
     | { [x: string]: unknown; type: "image"; data: string; mimeType: string; }
-    | { 
-        [x: string]: unknown; 
-        type: "resource"; 
-        resource: { 
-          [x: string]: unknown; 
-          text: string; 
-          uri: string; 
-          mimeType?: string; 
-        } | { 
-          [x: string]: unknown; 
-          uri: string; 
-          blob: string; 
-          mimeType?: string; 
-        }; 
-      }
+    | {
+      [x: string]: unknown;
+      type: "resource";
+      resource: {
+        [x: string]: unknown;
+        text: string;
+        uri: string;
+        mimeType?: string;
+      } | {
+        [x: string]: unknown;
+        uri: string;
+        blob: string;
+        mimeType?: string;
+      };
+    }
   )[];
   _meta?: Record<string, unknown>;
   isError?: boolean;
@@ -78,11 +84,11 @@ export type McpToolResponse = {
 async function compressImage(imageBuffer: Buffer, formatStr: string): Promise<Buffer> {
   const sharpInstance = sharp(imageBuffer);
   const format = formatStr.toLowerCase() as SupportedFormat;
-  
+
   // Check if format is supported
   if (format in COMPRESSION_OPTIONS) {
     const options = COMPRESSION_OPTIONS[format];
-    
+
     // Use specific methods based on format
     switch (format) {
       case 'jpeg':
@@ -102,7 +108,7 @@ async function compressImage(imageBuffer: Buffer, formatStr: string): Promise<Bu
         return await sharpInstance.toBuffer();
     }
   }
-  
+
   // Default to jpeg if format not supported
   return await sharpInstance.jpeg(COMPRESSION_OPTIONS.jpeg as any).toBuffer();
 }
@@ -111,7 +117,7 @@ async function compressImage(imageBuffer: Buffer, formatStr: string): Promise<Bu
 export async function extractImageFromFile(params: ExtractImageFromFileParams): Promise<McpToolResponse> {
   try {
     const { file_path, resize, max_width, max_height } = params;
-    
+
     // Check if file exists
     if (!fs.existsSync(file_path)) {
       return {
@@ -119,10 +125,10 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
         isError: true
       };
     }
-    
+
     // Read file
     let imageBuffer = fs.readFileSync(file_path);
-    
+
     // Check size
     if (imageBuffer.length > MAX_IMAGE_SIZE) {
       return {
@@ -130,17 +136,17 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
         isError: true
       };
     }
-    
+
     // Process the image
     let metadata = await sharp(imageBuffer).metadata();
-    
+
     // Always resize to ensure the base64 representation is reasonable
     // This will help avoid consuming too much of the context window
     if (metadata.width && metadata.height) {
       // Use provided dimensions or fallback to defaults for optimal LLM context usage
       const targetWidth = Math.min(metadata.width, DEFAULT_MAX_WIDTH);
       const targetHeight = Math.min(metadata.height, DEFAULT_MAX_HEIGHT);
-      
+
       // Only resize if needed
       if (metadata.width > targetWidth || metadata.height > targetHeight) {
         imageBuffer = await sharp(imageBuffer)
@@ -151,7 +157,7 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
             withoutEnlargement: true
           })
           .toBuffer();
-        
+
         // Update metadata after resize
         metadata = await sharp(imageBuffer).metadata();
       }
@@ -161,7 +167,7 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
     const fileExt = path.extname(file_path).toLowerCase();
     let mimeType = 'image/jpeg';
     let format = 'jpeg';
-    
+
     if (fileExt === '.png') {
       mimeType = 'image/png';
       format = 'png';
@@ -186,7 +192,7 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
       mimeType = 'image/avif';
       format = 'avif';
     }
-    
+
     // Compress the image based on its format
     try {
       imageBuffer = await compressImage(imageBuffer, format);
@@ -194,15 +200,15 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
       console.warn('Compression warning, using original image:', compressionError);
       // Continue with the original image if compression fails
     }
-    
+
     // Convert to base64
     const base64 = imageBuffer.toString('base64');
 
     // Return both text and image content
     return {
       content: [
-        { 
-          type: "text", 
+        {
+          type: "text",
           text: JSON.stringify({
             width: metadata.width,
             height: metadata.height,
@@ -230,7 +236,7 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
 export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Promise<McpToolResponse> {
   try {
     const { url, resize, max_width, max_height } = params;
-    
+
     // Validate URL
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       return {
@@ -243,7 +249,7 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
     if (ALLOWED_DOMAINS.length > 0) {
       const urlObj = new URL(url);
       const domain = urlObj.hostname;
-      const isAllowed = ALLOWED_DOMAINS.some((allowedDomain: string) => 
+      const isAllowed = ALLOWED_DOMAINS.some((allowedDomain: string) =>
         domain === allowedDomain || domain.endsWith(`.${allowedDomain}`)
       );
 
@@ -264,14 +270,14 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
     // Process the image
     let imageBuffer = Buffer.from(response.data);
     let metadata = await sharp(imageBuffer).metadata();
-    
+
     // Always resize to ensure the base64 representation is reasonable
     // This will help avoid consuming too much of the context window
     if (metadata.width && metadata.height) {
       // Use provided dimensions or fallback to defaults for optimal LLM context usage
       const targetWidth = Math.min(metadata.width, DEFAULT_MAX_WIDTH);
       const targetHeight = Math.min(metadata.height, DEFAULT_MAX_HEIGHT);
-      
+
       // Only resize if needed
       if (metadata.width > targetWidth || metadata.height > targetHeight) {
         imageBuffer = await sharp(imageBuffer)
@@ -282,7 +288,7 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
             withoutEnlargement: true
           })
           .toBuffer();
-        
+
         // Update metadata after resize
         metadata = await sharp(imageBuffer).metadata();
       }
@@ -304,8 +310,8 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
     // Return both text and image content
     return {
       content: [
-        { 
-          type: "text", 
+        {
+          type: "text",
           text: JSON.stringify({
             width: metadata.width,
             height: metadata.height,
@@ -333,12 +339,12 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
 export async function extractImageFromBase64(params: ExtractImageFromBase64Params): Promise<McpToolResponse> {
   try {
     const { base64, mime_type, resize, max_width, max_height } = params;
-    
+
     // Decode base64
     let imageBuffer;
     try {
       imageBuffer = Buffer.from(base64, 'base64');
-      
+
       // Quick validation - valid base64 strings should be decodable
       if (imageBuffer.length === 0) {
         throw new Error("Invalid base64 string - decoded to empty buffer");
@@ -349,7 +355,7 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
         isError: true
       };
     }
-    
+
     // Check size
     if (imageBuffer.length > MAX_IMAGE_SIZE) {
       return {
@@ -357,7 +363,7 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
         isError: true
       };
     }
-    
+
     // Process the image
     let metadata;
     try {
@@ -368,14 +374,14 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
         isError: true
       };
     }
-    
+
     // Always resize to ensure the base64 representation is reasonable
     // This will help avoid consuming too much of the context window
     if (metadata.width && metadata.height) {
       // Use provided dimensions or fallback to defaults for optimal LLM context usage
       const targetWidth = Math.min(metadata.width, DEFAULT_MAX_WIDTH);
       const targetHeight = Math.min(metadata.height, DEFAULT_MAX_HEIGHT);
-      
+
       // Only resize if needed
       if (metadata.width > targetWidth || metadata.height > targetHeight) {
         imageBuffer = await sharp(imageBuffer)
@@ -386,7 +392,7 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
             withoutEnlargement: true
           })
           .toBuffer();
-        
+
         // Update metadata after resize
         metadata = await sharp(imageBuffer).metadata();
       }
@@ -407,8 +413,8 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
     // Return both text and image content
     return {
       content: [
-        { 
-          type: "text", 
+        {
+          type: "text",
           text: JSON.stringify({
             width: metadata.width,
             height: metadata.height,
