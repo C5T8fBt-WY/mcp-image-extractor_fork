@@ -29,7 +29,7 @@ jobs:
         with:
           fetch-depth: 0 # Full history for git tags
 
-      # Setup .npmrc file to publish to npm
+      # Setup .npmrc file to publish to npm with OIDC authentication
       - uses: actions/setup-node@v4
         with:
           node-version: "20.x"
@@ -74,9 +74,8 @@ jobs:
           name: Release v${{ steps.version.outputs.version }}
           generate_release_notes: true
 
-      - name: Publish to npm with Trusted Publishing
+      - name: Publish to npm with Trusted Publishing (OIDC)
         # Publish if: manual trigger, release event, or commit message contains 'chore(release)'
         if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'release' || contains(github.event.head_commit.message, 'chore(release)') }}
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Authentication happens via OIDC (setup-node creates .npmrc with registry-url)
