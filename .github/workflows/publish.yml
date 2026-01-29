@@ -74,8 +74,11 @@ jobs:
           name: Release v${{ steps.version.outputs.version }}
           generate_release_notes: true
 
-      - name: Publish to npm with Trusted Publishing (OIDC)
+      - name: Publish to npm (Hybrid: Token auth + OIDC provenance)
         # Publish if: manual trigger, release event, or commit message contains 'chore(release)'
         if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'release' || contains(github.event.head_commit.message, 'chore(release)') }}
         run: npm publish --provenance --access public
-        # Authentication happens via OIDC (setup-node creates .npmrc with registry-url)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Authentication: NPM_TOKEN (required)
+        # Provenance: OIDC via id-token: write permission (automatic with --provenance flag)
