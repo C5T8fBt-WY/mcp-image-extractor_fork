@@ -3,6 +3,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   extractImageFromFile,
   extractImageFromUrl,
@@ -11,11 +13,21 @@ import {
 
 dotenv.config();
 
+// Read version from package.json
+const packageJsonPath = path.resolve(__dirname, '..', 'package.json');
+let packageVersion = '1.0.0';
+try {
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  packageVersion = packageJson.version || '1.0.0';
+} catch {
+  // Fallback to default version if package.json can't be read
+}
+
 // Create an MCP server
 const server = new McpServer({
   name: "mcp-image-extractor",
   description: "MCP server for analyzing of images from files, URLs, and base64 data for visual content understanding, text extraction (OCR), and object recognition in screenshots and photos",
-  version: "1.0.0"
+  version: packageVersion
 });
 
 // Add extract_image_from_file tool
@@ -74,4 +86,5 @@ server.connect(transport).catch((error: unknown) => {
   process.exit(1);
 });
 
-console.log('MCP Image Extractor server started in stdio mode'); 
+// Log version to stderr so it doesn't interfere with MCP protocol on stdout
+console.error(`MCP Image Extractor v${packageVersion} started`); 
