@@ -185,8 +185,9 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
       format = 'webp';
     }
     else if (fileExt === '.svg') {
-      mimeType = 'image/svg+xml';
-      format = 'svg';
+      // SVG files are rasterized by Sharp to PNG format
+      mimeType = 'image/png';
+      format = 'png';
     }
     else if (fileExt === '.avif') {
       mimeType = 'image/avif';

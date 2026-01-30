@@ -28,3 +28,5 @@ screenshots/
 
 # NPM configuration
 .npmrc
+
+tmp/

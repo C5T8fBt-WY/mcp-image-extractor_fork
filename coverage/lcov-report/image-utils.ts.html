@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">64.46% </span>
+                <span class="strong">65.04% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>78/121</span>
+                <span class='fraction'>80/123</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">45.83% </span>
+                <span class="strong">51.25% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>33/72</span>
+                <span class='fraction'>41/80</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">64.46% </span>
+                <span class="strong">65.04% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>78/121</span>
+                <span class='fraction'>80/123</span>
             </div>
         
             
@@ -495,7 +495,14 @@
 <a name='L430'></a><a href='#L430'>430</a>
 <a name='L431'></a><a href='#L431'>431</a>
 <a name='L432'></a><a href='#L432'>432</a>
-<a name='L433'></a><a href='#L433'>433</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">3x</span>
+<a name='L433'></a><a href='#L433'>433</a>
+<a name='L434'></a><a href='#L434'>434</a>
+<a name='L435'></a><a href='#L435'>435</a>
+<a name='L436'></a><a href='#L436'>436</a>
+<a name='L437'></a><a href='#L437'>437</a>
+<a name='L438'></a><a href='#L438'>438</a>
+<a name='L439'></a><a href='#L439'>439</a>
+<a name='L440'></a><a href='#L440'>440</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
@@ -506,6 +513,12 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -676,6 +689,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -933,25 +947,31 @@ import * as fs from 'fs';
 import * as path from 'path';
 &nbsp;
 // Configuration
-const MAX_IMAGE_SIZE = parseInt(process.env.MAX_IMAGE_SIZE || '10485760', 10); // 10MB default
+const MAX_IMAGE_SIZE = parseInt(process.env.MAX_IMAGE_SIZE || '52428800', 10); // 50MB default (increased from 10MB)
 const ALLOWED_DOMAINS = process.env.ALLOWED_DOMAINS ? <span class="branch-0 cbranch-no" title="branch not covered" >process.env.ALLOWED_DOMAINS.split(',') </span>: [];
 &nbsp;
-// Default max dimensions for optimal LLM context usage
-const DEFAULT_MAX_WIDTH = 512;
-const DEFAULT_MAX_HEIGHT = 512;
+// Default max dimensions for optimal LLM context usage (can be overridden via env vars)
+const DEFAULT_MAX_WIDTH = parseInt(process.env.DEFAULT_MAX_WIDTH || '512', 10);
+const DEFAULT_MAX_HEIGHT = parseInt(process.env.DEFAULT_MAX_HEIGHT || '512', 10);
 &nbsp;
-// Compression configuration based on format - new addition
+// Compression quality (can be overridden via env var, 1-100, higher = better quality but larger file)
+const COMPRESSION_QUALITY = parseInt(process.env.COMPRESSION_QUALITY || '80', 10);
+&nbsp;
+// PNG compression level (can be overridden via env var, 0-9, higher = smaller file but slower)
+const PNG_COMPRESSION_LEVEL = parseInt(process.env.PNG_COMPRESSION_LEVEL || '9', 10);
+&nbsp;
+// Compression configuration based on format
 type SupportedFormat = 'jpeg' | 'jpg' | 'png' | 'webp' | 'gif' | 'svg' | 'avif' | 'tiff';
 &nbsp;
 const COMPRESSION_OPTIONS: Record&lt;SupportedFormat, object&gt; = {
-  jpeg: { quality: 80 },
-  jpg: { quality: 80 },
-  png: { quality: 80, compressionLevel: 9 },
-  webp: { quality: 80 },
-  gif: { },
-  svg: { },
-  avif: { quality: 80 },
-  tiff: { quality: 80 }
+  jpeg: { quality: COMPRESSION_QUALITY },
+  jpg: { quality: COMPRESSION_QUALITY },
+  png: { quality: COMPRESSION_QUALITY, compressionLevel: PNG_COMPRESSION_LEVEL },
+  webp: { quality: COMPRESSION_QUALITY },
+  gif: {},
+  svg: {},
+  avif: { quality: COMPRESSION_QUALITY },
+  tiff: { quality: COMPRESSION_QUALITY }
 };
 &nbsp;
 // Type definitions
@@ -983,21 +1003,21 @@ export type McpToolResponse = {
   content: (
     | { [x: string]: unknown; type: "text"; text: string; }
     | { [x: string]: unknown; type: "image"; data: string; mimeType: string; }
-    | { 
-        [x: string]: unknown; 
-        type: "resource"; 
-        resource: { 
-          [x: string]: unknown; 
-          text: string; 
-          uri: string; 
-          mimeType?: string; 
-        } | { 
-          [x: string]: unknown; 
-          uri: string; 
-          blob: string; 
-          mimeType?: string; 
-        }; 
-      }
+    | {
+      [x: string]: unknown;
+      type: "resource";
+      resource: {
+        [x: string]: unknown;
+        text: string;
+        uri: string;
+        mimeType?: string;
+      } | {
+        [x: string]: unknown;
+        uri: string;
+        blob: string;
+        mimeType?: string;
+      };
+    }
   )[];
   _meta?: Record&lt;string, unknown&gt;;
   isError?: boolean;
@@ -1007,11 +1027,11 @@ export type McpToolResponse = {
 async function compressImage(imageBuffer: Buffer, formatStr: string): Promise&lt;Buffer&gt; {
   const sharpInstance = sharp(imageBuffer);
   const format = formatStr.toLowerCase() as SupportedFormat;
-  
+&nbsp;
   // Check if format is supported
   if (format in COMPRESSION_OPTIONS) {
     const options = COMPRESSION_OPTIONS[format];
-    
+&nbsp;
     // Use specific methods based on format
     switch (format) {
       case 'jpeg':
@@ -1031,7 +1051,7 @@ async function compressImage(imageBuffer: Buffer, formatStr: string): Promise&lt
 <span class="cstat-no" title="statement not covered" >        return await sharpInstance.toBuffer();</span>
     }
   }
-  
+&nbsp;
   // Default to jpeg if format not supported
 <span class="cstat-no" title="statement not covered" >  return await sharpInstance.jpeg(COMPRESSION_OPTIONS.jpeg as any).toBuffer();</span>
 }
@@ -1040,7 +1060,7 @@ async function compressImage(imageBuffer: Buffer, formatStr: string): Promise&lt
 export async function extractImageFromFile(params: ExtractImageFromFileParams): Promise&lt;McpToolResponse&gt; {
   try {
     const { file_path, resize, max_width, max_height } = params;
-    
+&nbsp;
     // Check if file exists
     <span class="missing-if-branch" title="if path not taken" >I</span>if (!fs.existsSync(file_path)) {
 <span class="cstat-no" title="statement not covered" >      return {</span>
@@ -1048,10 +1068,10 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
         isError: true
       };
     }
-    
+&nbsp;
     // Read file
     let imageBuffer = fs.readFileSync(file_path);
-    
+&nbsp;
     // Check size
     <span class="missing-if-branch" title="if path not taken" >I</span>if (imageBuffer.length &gt; MAX_IMAGE_SIZE) {
 <span class="cstat-no" title="statement not covered" >      return {</span>
@@ -1059,17 +1079,17 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
         isError: true
       };
     }
-    
+&nbsp;
     // Process the image
     let metadata = await sharp(imageBuffer).metadata();
-    
+&nbsp;
     // Always resize to ensure the base64 representation is reasonable
     // This will help avoid consuming too much of the context window
     if (metadata.width &amp;&amp; metadata.height) {
       // Use provided dimensions or fallback to defaults for optimal LLM context usage
       const targetWidth = Math.min(metadata.width, DEFAULT_MAX_WIDTH);
       const targetHeight = Math.min(metadata.height, DEFAULT_MAX_HEIGHT);
-      
+&nbsp;
       // Only resize if needed
       if (metadata.width &gt; targetWidth || <span class="branch-1 cbranch-no" title="branch not covered" >metadata.height &gt; targetHeight)</span> {
         imageBuffer = await sharp(imageBuffer)
@@ -1080,7 +1100,7 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
             withoutEnlargement: true
           })
           .toBuffer();
-        
+&nbsp;
         // Update metadata after resize
         metadata = await sharp(imageBuffer).metadata();
       }
@@ -1090,7 +1110,7 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
     const fileExt = path.extname(file_path).toLowerCase();
     let mimeType = 'image/jpeg';
     let format = 'jpeg';
-    
+&nbsp;
     if (fileExt === '.png') {
       mimeType = 'image/png';
       format = 'png';
@@ -1108,14 +1128,15 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
 <span class="cstat-no" title="statement not covered" >      format = 'webp';</span>
     }
     else <span class="missing-if-branch" title="if path not taken" >I</span>if (fileExt === '.svg') {
-<span class="cstat-no" title="statement not covered" >      mimeType = 'image/svg+xml';</span>
-<span class="cstat-no" title="statement not covered" >      format = 'svg';</span>
+      // SVG files are rasterized by Sharp to PNG format
+<span class="cstat-no" title="statement not covered" >      mimeType = 'image/png';</span>
+<span class="cstat-no" title="statement not covered" >      format = 'png';</span>
     }
     else <span class="missing-if-branch" title="if path not taken" >I</span>if (fileExt === '.avif') {
 <span class="cstat-no" title="statement not covered" >      mimeType = 'image/avif';</span>
 <span class="cstat-no" title="statement not covered" >      format = 'avif';</span>
     }
-    
+&nbsp;
     // Compress the image based on its format
     try {
       imageBuffer = await compressImage(imageBuffer, format);
@@ -1123,15 +1144,15 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
       console.warn('Compression warning, using original image:', compressionError);
       // Continue with the original image if compression fails
     }
-    
+&nbsp;
     // Convert to base64
     const base64 = imageBuffer.toString('base64');
 &nbsp;
     // Return both text and image content
     return {
       content: [
-        { 
-          type: "text", 
+        {
+          type: "text",
           text: JSON.stringify({
             width: metadata.width,
             height: metadata.height,
@@ -1159,7 +1180,7 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
 export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Promise&lt;McpToolResponse&gt; {
   try {
     const { url, resize, max_width, max_height } = params;
-    
+&nbsp;
     // Validate URL
     if (!url.startsWith('http://') &amp;&amp; !url.startsWith('https://')) {
       return {
@@ -1172,7 +1193,7 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
     <span class="missing-if-branch" title="if path not taken" >I</span>if (ALLOWED_DOMAINS.length &gt; 0) {
       const urlObj = <span class="cstat-no" title="statement not covered" >new URL(url);</span>
       const domain = <span class="cstat-no" title="statement not covered" >urlObj.hostname;</span>
-      const isAllowed = <span class="cstat-no" title="statement not covered" >ALLOWED_DOMAINS.some(<span class="fstat-no" title="function not covered" >(a</span>llowedDomain: string) =&gt; </span>
+      const isAllowed = <span class="cstat-no" title="statement not covered" >ALLOWED_DOMAINS.some(<span class="fstat-no" title="function not covered" >(a</span>llowedDomain: string) =&gt;</span>
 <span class="cstat-no" title="statement not covered" >        domain === allowedDomain || domain.endsWith(`.${allowedDomain}`)</span>
       );
 &nbsp;
@@ -1193,14 +1214,14 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
     // Process the image
     let imageBuffer = <span class="cstat-no" title="statement not covered" >Buffer.from(response.data);</span>
     let metadata = <span class="cstat-no" title="statement not covered" >await sharp(imageBuffer).metadata();</span>
-    
+&nbsp;
     // Always resize to ensure the base64 representation is reasonable
     // This will help avoid consuming too much of the context window
 <span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (metadata.width &amp;&amp; metadata.height) {</span>
       // Use provided dimensions or fallback to defaults for optimal LLM context usage
       const targetWidth = <span class="cstat-no" title="statement not covered" >Math.min(metadata.width, DEFAULT_MAX_WIDTH);</span>
       const targetHeight = <span class="cstat-no" title="statement not covered" >Math.min(metadata.height, DEFAULT_MAX_HEIGHT);</span>
-      
+&nbsp;
       // Only resize if needed
 <span class="cstat-no" title="statement not covered" >      <span class="missing-if-branch" title="if path not taken" >I</span>if (metadata.width &gt; targetWidth || metadata.height &gt; targetHeight) {</span>
 <span class="cstat-no" title="statement not covered" >        imageBuffer = await sharp(imageBuffer)</span>
@@ -1211,7 +1232,7 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
             withoutEnlargement: true
           })
           .toBuffer();
-        
+&nbsp;
         // Update metadata after resize
 <span class="cstat-no" title="statement not covered" >        metadata = await sharp(imageBuffer).metadata();</span>
       }
@@ -1233,8 +1254,8 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
     // Return both text and image content
 <span class="cstat-no" title="statement not covered" >    return {</span>
       content: [
-        { 
-          type: "text", 
+        {
+          type: "text",
           text: JSON.stringify({
             width: metadata.width,
             height: metadata.height,
@@ -1262,12 +1283,12 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
 export async function extractImageFromBase64(params: ExtractImageFromBase64Params): Promise&lt;McpToolResponse&gt; {
   try {
     const { base64, mime_type, resize, max_width, max_height } = params;
-    
+&nbsp;
     // Decode base64
     let imageBuffer;
     try {
       imageBuffer = Buffer.from(base64, 'base64');
-      
+&nbsp;
       // Quick validation - valid base64 strings should be decodable
       <span class="missing-if-branch" title="if path not taken" >I</span>if (imageBuffer.length === 0) {
 <span class="cstat-no" title="statement not covered" >        throw new Error("Invalid base64 string - decoded to empty buffer");</span>
@@ -1278,7 +1299,7 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
         isError: true
       };
     }
-    
+&nbsp;
     // Check size
     <span class="missing-if-branch" title="if path not taken" >I</span>if (imageBuffer.length &gt; MAX_IMAGE_SIZE) {
 <span class="cstat-no" title="statement not covered" >      return {</span>
@@ -1286,7 +1307,7 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
         isError: true
       };
     }
-    
+&nbsp;
     // Process the image
     let metadata;
     try {
@@ -1297,14 +1318,14 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
         isError: true
       };
     }
-    
+&nbsp;
     // Always resize to ensure the base64 representation is reasonable
     // This will help avoid consuming too much of the context window
     if (metadata.width &amp;&amp; metadata.height) {
       // Use provided dimensions or fallback to defaults for optimal LLM context usage
       const targetWidth = Math.min(metadata.width, DEFAULT_MAX_WIDTH);
       const targetHeight = Math.min(metadata.height, DEFAULT_MAX_HEIGHT);
-      
+&nbsp;
       // Only resize if needed
       if (metadata.width &gt; targetWidth || <span class="branch-1 cbranch-no" title="branch not covered" >metadata.height &gt; targetHeight)</span> {
         imageBuffer = await sharp(imageBuffer)
@@ -1315,7 +1336,7 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
             withoutEnlargement: true
           })
           .toBuffer();
-        
+&nbsp;
         // Update metadata after resize
         metadata = await sharp(imageBuffer).metadata();
       }
@@ -1336,8 +1357,8 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
     // Return both text and image content
     return {
       content: [
-        { 
-          type: "text", 
+        {
+          type: "text",
           text: JSON.stringify({
             width: metadata.width,
             height: metadata.height,
@@ -1366,7 +1387,7 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-03-27T21:25:07.297Z
+                at 2026-01-30T14:03:08.954Z
             </div>
         <script src="prettify.js"></script>
         <script>
