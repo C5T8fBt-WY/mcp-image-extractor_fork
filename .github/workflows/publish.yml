@@ -77,5 +77,6 @@ jobs:
       - name: Publish to npm with Trusted Publishing
         # Publish if: manual trigger, release event, or commit message contains 'chore(release)'
         if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'release' || contains(github.event.head_commit.message, 'chore(release)') }}
-        run: npm publish
-        # No env block needed - OIDC handles authentication automatically via setup-node
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
