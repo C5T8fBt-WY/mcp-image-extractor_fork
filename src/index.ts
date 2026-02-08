@@ -38,7 +38,9 @@ server.tool(
     file_path: z.string().describe("Path to the image file to analyze (supports screenshots, photos, diagrams, and documents in PNG, JPG, GIF, WebP formats)"),
     resize: z.boolean().default(true).describe("For backward compatibility only. Images are always automatically resized to optimal dimensions (max 512x512) for LLM analysis"),
     max_width: z.number().default(512).describe("For backward compatibility only. Default maximum width is now 512px"),
-    max_height: z.number().default(512).describe("For backward compatibility only. Default maximum height is now 512px")
+    max_height: z.number().default(512).describe("For backward compatibility only. Default maximum height is now 512px"),
+    focus_xyxy: z.array(z.number()).optional().describe("Optional focus rectangle [x1, y1, x2, y2]. Can be pixel coordinates (integers) or ratios (0.0-1.0)."),
+    focal_point: z.array(z.number()).optional().describe("Optional focal point [centerX, centerY, halfWidth, halfHeight]. Can be pixel coordinates (integers) or ratios (0.0-1.0).")
   },
   async (args, extra) => {
     const result = await extractImageFromFile(args);
@@ -54,7 +56,9 @@ server.tool(
     url: z.string().describe("URL of the image to analyze for visual content, text extraction, or object recognition (supports web screenshots, photos, diagrams)"),
     resize: z.boolean().default(true).describe("For backward compatibility only. Images are always automatically resized to optimal dimensions (max 512x512) for LLM analysis"),
     max_width: z.number().default(512).describe("For backward compatibility only. Default maximum width is now 512px"),
-    max_height: z.number().default(512).describe("For backward compatibility only. Default maximum height is now 512px")
+    max_height: z.number().default(512).describe("For backward compatibility only. Default maximum height is now 512px"),
+    focus_xyxy: z.array(z.number()).optional().describe("Optional focus rectangle [x1, y1, x2, y2]. Can be pixel coordinates (integers) or ratios (0.0-1.0)."),
+    focal_point: z.array(z.number()).optional().describe("Optional focal point [centerX, centerY, halfWidth, halfHeight]. Can be pixel coordinates (integers) or ratios (0.0-1.0).")
   },
   async (args, extra) => {
     const result = await extractImageFromUrl(args);
@@ -71,7 +75,9 @@ server.tool(
     mime_type: z.string().default("image/png").describe("MIME type of the image (e.g., image/png, image/jpeg)"),
     resize: z.boolean().default(true).describe("For backward compatibility only. Images are always automatically resized to optimal dimensions (max 512x512) for LLM analysis"),
     max_width: z.number().default(512).describe("For backward compatibility only. Default maximum width is now 512px"),
-    max_height: z.number().default(512).describe("For backward compatibility only. Default maximum height is now 512px")
+    max_height: z.number().default(512).describe("For backward compatibility only. Default maximum height is now 512px"),
+    focus_xyxy: z.array(z.number()).optional().describe("Optional focus rectangle [x1, y1, x2, y2]. Can be pixel coordinates (integers) or ratios (0.0-1.0)."),
+    focal_point: z.array(z.number()).optional().describe("Optional focal point [centerX, centerY, halfWidth, halfHeight]. Can be pixel coordinates (integers) or ratios (0.0-1.0).")
   },
   async (args, extra) => {
     const result = await extractImageFromBase64(args);

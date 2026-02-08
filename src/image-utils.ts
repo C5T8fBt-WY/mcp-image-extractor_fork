@@ -37,6 +37,8 @@ export type ExtractImageFromFileParams = {
   resize: boolean;
   max_width: number;
   max_height: number;
+  focus_xyxy?: number[];
+  focal_point?: number[];
 };
 
 export type ExtractImageFromUrlParams = {
@@ -44,6 +46,8 @@ export type ExtractImageFromUrlParams = {
   resize: boolean;
   max_width: number;
   max_height: number;
+  focus_xyxy?: number[];
+  focal_point?: number[];
 };
 
 export type ExtractImageFromBase64Params = {
@@ -52,6 +56,8 @@ export type ExtractImageFromBase64Params = {
   resize: boolean;
   max_width: number;
   max_height: number;
+  focus_xyxy?: number[];
+  focal_point?: number[];
 };
 
 // MCP SDK expects this specific format for tool responses
@@ -113,6 +119,93 @@ async function compressImage(imageBuffer: Buffer, formatStr: string): Promise<Bu
   return await sharpInstance.jpeg(COMPRESSION_OPTIONS.jpeg as any).toBuffer();
 }
 
+// Helper function to check if values are ratios (all between 0 and 1)
+function isRatio(values: number[]): boolean {
+  // If all values are between 0 and 1 (inclusive), treat as ratio
+  // Exception: if any value matches the image dimension, it might be ambiguous, 
+  // but standardizing on 0-1.0 range for ratios is best.
+  // We assume that if a user wants 1 pixel, they probably won't use 0-1 for other coords.
+  return values.every(v => v >= 0 && v <= 1.0);
+}
+
+// Helper function to apply focus (crop) to image
+async function applyImageFocus(
+  imageBuffer: Buffer,
+  metadata: any,
+  focus_xyxy?: number[],
+  focal_point?: number[]
+): Promise<Buffer | null> {
+  if ((!focus_xyxy || focus_xyxy.length !== 4) && (!focal_point || focal_point.length !== 4)) return null;
+  if (!metadata.width || !metadata.height) return null;
+
+  let left = 0;
+  let top = 0;
+  let width = metadata.width;
+  let height = metadata.height;
+  let shouldCrop = false;
+
+  if (focus_xyxy && focus_xyxy.length === 4) {
+    const [x1, y1, x2, y2] = focus_xyxy;
+    if (isRatio(focus_xyxy)) {
+      left = Math.round(x1 * metadata.width);
+      top = Math.round(y1 * metadata.height);
+      width = Math.round((x2 - x1) * metadata.width);
+      height = Math.round((y2 - y1) * metadata.height);
+    } else {
+      left = Math.round(x1);
+      top = Math.round(y1);
+      width = Math.round(x2 - x1);
+      height = Math.round(y2 - y1);
+    }
+    shouldCrop = true;
+  } else if (focal_point && focal_point.length === 4) {
+    const [cx, cy, hw, hh] = focal_point;
+    if (isRatio(focal_point)) {
+      const pixelCx = cx * metadata.width;
+      const pixelCy = cy * metadata.height;
+      const pixelHw = hw * metadata.width;
+      const pixelHh = hh * metadata.height;
+
+      left = Math.round(pixelCx - pixelHw);
+      top = Math.round(pixelCy - pixelHh);
+      width = Math.round(pixelHw * 2);
+      height = Math.round(pixelHh * 2);
+    } else {
+      left = Math.round(cx - hw);
+      top = Math.round(cy - hh);
+      width = Math.round(hw * 2);
+      height = Math.round(hh * 2);
+    }
+    shouldCrop = true;
+  }
+
+  if (shouldCrop) {
+    // Clamp coordinates
+    const imgWidth = metadata.width;
+    const imgHeight = metadata.height;
+
+    left = Math.max(0, left);
+    top = Math.max(0, top);
+
+    // Ensure extract region is within bounds
+    if (left + width > imgWidth) {
+      width = imgWidth - left;
+    }
+    if (top + height > imgHeight) {
+      height = imgHeight - top;
+    }
+
+    // Ensure positive dimensions
+    if (width > 0 && height > 0) {
+      return await sharp(imageBuffer)
+        .extract({ left, top, width, height })
+        .toBuffer();
+    }
+  }
+
+  return null;
+}
+
 // Extract image from file
 export async function extractImageFromFile(params: ExtractImageFromFileParams): Promise<McpToolResponse> {
   try {
@@ -139,6 +232,13 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
 
     // Process the image
     let metadata = await sharp(imageBuffer).metadata();
+
+    // Apply focus if requested
+    const focusedBuffer = await applyImageFocus(imageBuffer, metadata, params.focus_xyxy, params.focal_point);
+    if (focusedBuffer) {
+      imageBuffer = focusedBuffer;
+      metadata = await sharp(imageBuffer).metadata();
+    }
 
     // Always resize to ensure the base64 representation is reasonable
     // This will help avoid consuming too much of the context window
@@ -272,6 +372,13 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
     let imageBuffer = Buffer.from(response.data);
     let metadata = await sharp(imageBuffer).metadata();
 
+    // Apply focus if requested
+    const focusedBuffer = await applyImageFocus(imageBuffer, metadata, params.focus_xyxy, params.focal_point);
+    if (focusedBuffer) {
+      imageBuffer = focusedBuffer;
+      metadata = await sharp(imageBuffer).metadata();
+    }
+
     // Always resize to ensure the base64 representation is reasonable
     // This will help avoid consuming too much of the context window
     if (metadata.width && metadata.height) {
@@ -374,6 +481,13 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
         content: [{ type: "text", text: `Error: Could not process image data - ${e instanceof Error ? e.message : String(e)}` }],
         isError: true
       };
+    }
+
+    // Apply focus if requested
+    const focusedBuffer = await applyImageFocus(imageBuffer, metadata, params.focus_xyxy, params.focal_point);
+    if (focusedBuffer) {
+      imageBuffer = focusedBuffer;
+      metadata = await sharp(imageBuffer).metadata();
     }
 
     // Always resize to ensure the base64 representation is reasonable
