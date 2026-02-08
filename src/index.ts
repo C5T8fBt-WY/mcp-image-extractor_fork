@@ -33,7 +33,7 @@ const server = new McpServer({
 // Add extract_image_from_file tool
 server.tool(
   "extract_image_from_file",
-  "Extract and analyze images from local file paths. Supports visual content understanding, OCR text extraction, and object recognition for screenshots, photos, diagrams, and documents.",
+  "Extract and analyze images from local file paths. Supports visual content understanding, OCR text extraction, and object recognition for screenshots, photos, diagrams, and documents. Use focus_xyxy or focal_point to crop specific regions when the area of interest is small or when you want to reduce token usage by excluding irrelevant parts.",
   {
     file_path: z.string().describe("Path to the image file to analyze (supports screenshots, photos, diagrams, and documents in PNG, JPG, GIF, WebP formats)"),
     resize: z.boolean().default(true).describe("For backward compatibility only. Images are always automatically resized to optimal dimensions (max 512x512) for LLM analysis"),
@@ -51,7 +51,7 @@ server.tool(
 // Add extract_image_from_url tool
 server.tool(
   "extract_image_from_url",
-  "Extract and analyze images from web URLs. Perfect for analyzing web screenshots, online photos, diagrams, or any image accessible via HTTP/HTTPS for visual content analysis and text extraction.",
+  "Extract and analyze images from web URLs. Perfect for analyzing web screenshots, online photos, diagrams, or any image accessible via HTTP/HTTPS for visual content analysis and text extraction. Use focus_xyxy or focal_point to crop specific regions when the area of interest is small or when you want to reduce token usage by excluding irrelevant parts.",
   {
     url: z.string().describe("URL of the image to analyze for visual content, text extraction, or object recognition (supports web screenshots, photos, diagrams)"),
     resize: z.boolean().default(true).describe("For backward compatibility only. Images are always automatically resized to optimal dimensions (max 512x512) for LLM analysis"),
@@ -69,7 +69,7 @@ server.tool(
 // Add extract_image_from_base64 tool
 server.tool(
   "extract_image_from_base64",
-  "Extract and analyze images from base64-encoded data. Ideal for processing screenshots from clipboard, dynamically generated images, or images embedded in applications without requiring file system access.",
+  "Extract and analyze images from base64-encoded data. Ideal for processing screenshots from clipboard, dynamically generated images, or images embedded in applications without requiring file system access. Use focus_xyxy or focal_point to crop specific regions when the area of interest is small or when you want to reduce token usage by excluding irrelevant parts.",
   {
     base64: z.string().describe("Base64-encoded image data to analyze (useful for screenshots, images from clipboard, or dynamically generated visuals)"),
     mime_type: z.string().default("image/png").describe("MIME type of the image (e.g., image/png, image/jpeg)"),
