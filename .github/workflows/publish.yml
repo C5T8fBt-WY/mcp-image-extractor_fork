@@ -60,6 +60,11 @@ jobs:
             if [ -n "$HEAD_TAG" ]; then
               echo "new=$CURRENT_VERSION" >> $GITHUB_OUTPUT
               echo "tag_exists=true" >> $GITHUB_OUTPUT
+            # Check if last commit was a manual version bump (skip CI if so)
+            elif git log -1 --pretty=%B | grep -qE '^(1\.[0-9]+\.[0-9]+|chore.*version|[0-9]+\.[0-9]+\.[0-9]+)$'; then
+              echo "Manual version bump detected, skipping CI version bump"
+              echo "new=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+              echo "tag_exists=true" >> $GITHUB_OUTPUT
             else
               # Increment patch version
               IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"

@@ -1,6 +1,6 @@
 {
   "name": "@c5t8fbt-wy/mcp-image-extractor",
-  "version": "1.2.10",
+  "version": "1.5.0",
   "description": "Enhanced MCP server for extracting and converting images to base64 for LLM analysis with configurable quality settings",
   "main": "dist/index.js",
   "bin": {
