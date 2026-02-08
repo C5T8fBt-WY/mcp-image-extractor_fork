@@ -232,6 +232,12 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
 
     // Process the image
     let metadata = await sharp(imageBuffer).metadata();
+    
+    // Track original dimensions for info message
+    const originalWidth = metadata.width || 0;
+    const originalHeight = metadata.height || 0;
+    const originalPixels = originalWidth * originalHeight;
+    const hasFocus = !!(params.focus_xyxy || params.focal_point);
 
     // Apply focus if requested
     const focusedBuffer = await applyImageFocus(imageBuffer, metadata, params.focus_xyxy, params.focal_point);
@@ -305,17 +311,25 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
     // Convert to base64
     const base64 = imageBuffer.toString('base64');
 
+    // Prepare metadata with optional info message
+    const resultMetadata: any = {
+      width: metadata.width,
+      height: metadata.height,
+      format: metadata.format,
+      size: imageBuffer.length
+    };
+    
+    // Add info message for large images without focus
+    if (originalPixels > 300000 && !hasFocus) {
+      resultMetadata.info = `Large image detected (${originalWidth}x${originalHeight} = ${originalPixels.toLocaleString()} pixels). Consider using focus_xyxy or focal_point to zoom into specific regions for better detail recognition and reduced token usage.`;
+    }
+
     // Return both text and image content
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify({
-            width: metadata.width,
-            height: metadata.height,
-            format: metadata.format,
-            size: imageBuffer.length
-          })
+          text: JSON.stringify(resultMetadata)
         },
         {
           type: "image",
@@ -371,6 +385,12 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
     // Process the image
     let imageBuffer = Buffer.from(response.data);
     let metadata = await sharp(imageBuffer).metadata();
+    
+    // Track original dimensions for info message
+    const originalWidth = metadata.width || 0;
+    const originalHeight = metadata.height || 0;
+    const originalPixels = originalWidth * originalHeight;
+    const hasFocus = !!(params.focus_xyxy || params.focal_point);
 
     // Apply focus if requested
     const focusedBuffer = await applyImageFocus(imageBuffer, metadata, params.focus_xyxy, params.focal_point);
@@ -415,17 +435,25 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
     const base64 = imageBuffer.toString('base64');
     const mimeType = response.headers['content-type'] || 'image/jpeg';
 
+    // Prepare metadata with optional info message
+    const resultMetadata: any = {
+      width: metadata.width,
+      height: metadata.height,
+      format: metadata.format,
+      size: imageBuffer.length
+    };
+    
+    // Add info message for large images without focus
+    if (originalPixels > 300000 && !hasFocus) {
+      resultMetadata.info = `Large image detected (${originalWidth}x${originalHeight} = ${originalPixels.toLocaleString()} pixels). Consider using focus_xyxy or focal_point to zoom into specific regions for better detail recognition and reduced token usage.`;
+    }
+
     // Return both text and image content
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify({
-            width: metadata.width,
-            height: metadata.height,
-            format: metadata.format,
-            size: imageBuffer.length
-          })
+          text: JSON.stringify(resultMetadata)
         },
         {
           type: "image",
@@ -482,6 +510,12 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
         isError: true
       };
     }
+    
+    // Track original dimensions for info message
+    const originalWidth = metadata.width || 0;
+    const originalHeight = metadata.height || 0;
+    const originalPixels = originalWidth * originalHeight;
+    const hasFocus = !!(params.focus_xyxy || params.focal_point);
 
     // Apply focus if requested
     const focusedBuffer = await applyImageFocus(imageBuffer, metadata, params.focus_xyxy, params.focal_point);
@@ -525,17 +559,25 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
     // Convert back to base64
     const processedBase64 = imageBuffer.toString('base64');
 
+    // Prepare metadata with optional info message
+    const resultMetadata: any = {
+      width: metadata.width,
+      height: metadata.height,
+      format: metadata.format,
+      size: imageBuffer.length
+    };
+    
+    // Add info message for large images without focus
+    if (originalPixels > 300000 && !hasFocus) {
+      resultMetadata.info = `Large image detected (${originalWidth}x${originalHeight} = ${originalPixels.toLocaleString()} pixels). Consider using focus_xyxy or focal_point to zoom into specific regions for better detail recognition and reduced token usage.`;
+    }
+
     // Return both text and image content
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify({
-            width: metadata.width,
-            height: metadata.height,
-            format: metadata.format,
-            size: imageBuffer.length
-          })
+          text: JSON.stringify(resultMetadata)
         },
         {
           type: "image",
