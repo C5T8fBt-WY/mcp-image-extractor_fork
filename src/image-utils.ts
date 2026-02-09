@@ -4,8 +4,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // Configuration
-const MAX_IMAGE_SIZE = parseInt(process.env.MAX_IMAGE_SIZE || '52428800', 10); // 50MB default (increased from 10MB)
-const ALLOWED_DOMAINS = process.env.ALLOWED_DOMAINS ? process.env.ALLOWED_DOMAINS.split(',') : [];
+export const MAX_IMAGE_SIZE = parseInt(process.env.MAX_IMAGE_SIZE || '52428800', 10); // 50MB default (increased from 10MB)
+export const ALLOWED_DOMAINS = process.env.ALLOWED_DOMAINS ? process.env.ALLOWED_DOMAINS.split(',') : [];
 
 // Default max dimensions for optimal LLM context usage (can be overridden via env vars)
 const DEFAULT_MAX_WIDTH = parseInt(process.env.DEFAULT_MAX_WIDTH || '512', 10);
@@ -58,6 +58,15 @@ export type ExtractImageFromBase64Params = {
   max_height: number;
   focus_xyxy?: number[];
   focal_point?: number[];
+};
+
+export type ProcessImageBufferParams = {
+  imageBuffer: Buffer;
+  format: string;
+  mimeType: string;
+  focus_xyxy?: number[];
+  focal_point?: number[];
+  extraMetadata?: Record<string, unknown>;
 };
 
 // MCP SDK expects this specific format for tool responses
@@ -122,7 +131,7 @@ async function compressImage(imageBuffer: Buffer, formatStr: string): Promise<Bu
 // Helper function to check if values are ratios (all between 0 and 1)
 function isRatio(values: number[]): boolean {
   // If all values are between 0 and 1 (inclusive), treat as ratio
-  // Exception: if any value matches the image dimension, it might be ambiguous, 
+  // Exception: if any value matches the image dimension, it might be ambiguous,
   // but standardizing on 0-1.0 range for ratios is best.
   // We assume that if a user wants 1 pixel, they probably won't use 0-1 for other coords.
   return values.every(v => v >= 0 && v <= 1.0);
@@ -206,12 +215,120 @@ async function applyImageFocus(
   return null;
 }
 
+// Map file extension to MIME type and compression format
+export function getMimeAndFormat(fileExt: string): { mimeType: string; format: string } {
+  switch (fileExt) {
+    case '.png':
+      return { mimeType: 'image/png', format: 'png' };
+    case '.jpg':
+    case '.jpeg':
+      return { mimeType: 'image/jpeg', format: 'jpeg' };
+    case '.gif':
+      return { mimeType: 'image/gif', format: 'gif' };
+    case '.webp':
+      return { mimeType: 'image/webp', format: 'webp' };
+    case '.svg':
+      // SVG files are rasterized by Sharp to PNG format
+      return { mimeType: 'image/png', format: 'png' };
+    case '.avif':
+      return { mimeType: 'image/avif', format: 'avif' };
+    default:
+      return { mimeType: 'image/jpeg', format: 'jpeg' };
+  }
+}
+
+// Validate URL domain against ALLOWED_DOMAINS
+export function validateDomain(url: string): string | null {
+  if (ALLOWED_DOMAINS.length === 0) return null;
+
+  const urlObj = new URL(url);
+  const domain = urlObj.hostname;
+  const isAllowed = ALLOWED_DOMAINS.some((allowedDomain: string) =>
+    domain === allowedDomain || domain.endsWith(`.${allowedDomain}`)
+  );
+
+  if (!isAllowed) {
+    return `Error: Domain ${domain} is not in the allowed domains list`;
+  }
+  return null;
+}
+
+// Shared image processing pipeline: focus → resize → compress → base64 → response
+export async function processImageBuffer(params: ProcessImageBufferParams): Promise<McpToolResponse> {
+  let { imageBuffer } = params;
+  const { format, mimeType } = params;
+
+  let metadata = await sharp(imageBuffer).metadata();
+
+  // Track original dimensions for info message
+  const originalWidth = metadata.width || 0;
+  const originalHeight = metadata.height || 0;
+  const originalPixels = originalWidth * originalHeight;
+  const hasFocus = !!(params.focus_xyxy || params.focal_point);
+
+  // Apply focus if requested
+  const focusedBuffer = await applyImageFocus(imageBuffer, metadata, params.focus_xyxy, params.focal_point);
+  if (focusedBuffer) {
+    imageBuffer = focusedBuffer;
+    metadata = await sharp(imageBuffer).metadata();
+  }
+
+  // Resize to optimal dimensions for LLM context
+  if (metadata.width && metadata.height) {
+    const targetWidth = Math.min(metadata.width, DEFAULT_MAX_WIDTH);
+    const targetHeight = Math.min(metadata.height, DEFAULT_MAX_HEIGHT);
+
+    if (metadata.width > targetWidth || metadata.height > targetHeight) {
+      imageBuffer = await sharp(imageBuffer)
+        .resize({
+          width: targetWidth,
+          height: targetHeight,
+          fit: 'inside',
+          withoutEnlargement: true
+        })
+        .toBuffer();
+
+      metadata = await sharp(imageBuffer).metadata();
+    }
+  }
+
+  // Compress the image based on its format
+  try {
+    imageBuffer = await compressImage(imageBuffer, format);
+  } catch (compressionError) {
+    console.warn('Compression warning, using original image:', compressionError);
+  }
+
+  // Convert to base64
+  const base64 = imageBuffer.toString('base64');
+
+  // Build metadata
+  const resultMetadata: any = {
+    width: metadata.width,
+    height: metadata.height,
+    format: metadata.format,
+    size: imageBuffer.length,
+    ...params.extraMetadata
+  };
+
+  // Add info message for large images without focus
+  if (originalPixels > 300000 && !hasFocus) {
+    resultMetadata.info = `Large image detected (${originalWidth}x${originalHeight} = ${originalPixels.toLocaleString()} pixels). Consider using focus_xyxy or focal_point to zoom into specific regions for better detail recognition and reduced token usage.`;
+  }
+
+  return {
+    content: [
+      { type: "text", text: JSON.stringify(resultMetadata) },
+      { type: "image", data: base64, mimeType: mimeType }
+    ]
+  };
+}
+
 // Extract image from file
 export async function extractImageFromFile(params: ExtractImageFromFileParams): Promise<McpToolResponse> {
   try {
-    const { file_path, resize, max_width, max_height } = params;
+    const { file_path } = params;
 
-    // Check if file exists
     if (!fs.existsSync(file_path)) {
       return {
         content: [{ type: "text", text: `Error: File ${file_path} does not exist` }],
@@ -219,10 +336,8 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
       };
     }
 
-    // Read file
-    let imageBuffer = fs.readFileSync(file_path);
+    const imageBuffer = fs.readFileSync(file_path);
 
-    // Check size
     if (imageBuffer.length > MAX_IMAGE_SIZE) {
       return {
         content: [{ type: "text", text: `Error: Image size exceeds maximum allowed size of ${MAX_IMAGE_SIZE} bytes` }],
@@ -230,114 +345,16 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
       };
     }
 
-    // Process the image
-    let metadata = await sharp(imageBuffer).metadata();
-    
-    // Track original dimensions for info message
-    const originalWidth = metadata.width || 0;
-    const originalHeight = metadata.height || 0;
-    const originalPixels = originalWidth * originalHeight;
-    const hasFocus = !!(params.focus_xyxy || params.focal_point);
-
-    // Apply focus if requested
-    const focusedBuffer = await applyImageFocus(imageBuffer, metadata, params.focus_xyxy, params.focal_point);
-    if (focusedBuffer) {
-      imageBuffer = focusedBuffer;
-      metadata = await sharp(imageBuffer).metadata();
-    }
-
-    // Always resize to ensure the base64 representation is reasonable
-    // This will help avoid consuming too much of the context window
-    if (metadata.width && metadata.height) {
-      // Use provided dimensions or fallback to defaults for optimal LLM context usage
-      const targetWidth = Math.min(metadata.width, DEFAULT_MAX_WIDTH);
-      const targetHeight = Math.min(metadata.height, DEFAULT_MAX_HEIGHT);
-
-      // Only resize if needed
-      if (metadata.width > targetWidth || metadata.height > targetHeight) {
-        imageBuffer = await sharp(imageBuffer)
-          .resize({
-            width: targetWidth,
-            height: targetHeight,
-            fit: 'inside',
-            withoutEnlargement: true
-          })
-          .toBuffer();
-
-        // Update metadata after resize
-        metadata = await sharp(imageBuffer).metadata();
-      }
-    }
-
-    // Determine mime type based on file extension
     const fileExt = path.extname(file_path).toLowerCase();
-    let mimeType = 'image/jpeg';
-    let format = 'jpeg';
+    const { mimeType, format } = getMimeAndFormat(fileExt);
 
-    if (fileExt === '.png') {
-      mimeType = 'image/png';
-      format = 'png';
-    }
-    else if (fileExt === '.jpg' || fileExt === '.jpeg') {
-      mimeType = 'image/jpeg';
-      format = 'jpeg';
-    }
-    else if (fileExt === '.gif') {
-      mimeType = 'image/gif';
-      format = 'gif';
-    }
-    else if (fileExt === '.webp') {
-      mimeType = 'image/webp';
-      format = 'webp';
-    }
-    else if (fileExt === '.svg') {
-      // SVG files are rasterized by Sharp to PNG format
-      mimeType = 'image/png';
-      format = 'png';
-    }
-    else if (fileExt === '.avif') {
-      mimeType = 'image/avif';
-      format = 'avif';
-    }
-
-    // Compress the image based on its format
-    try {
-      imageBuffer = await compressImage(imageBuffer, format);
-    } catch (compressionError) {
-      console.warn('Compression warning, using original image:', compressionError);
-      // Continue with the original image if compression fails
-    }
-
-    // Convert to base64
-    const base64 = imageBuffer.toString('base64');
-
-    // Prepare metadata with optional info message
-    const resultMetadata: any = {
-      width: metadata.width,
-      height: metadata.height,
-      format: metadata.format,
-      size: imageBuffer.length
-    };
-    
-    // Add info message for large images without focus
-    if (originalPixels > 300000 && !hasFocus) {
-      resultMetadata.info = `Large image detected (${originalWidth}x${originalHeight} = ${originalPixels.toLocaleString()} pixels). Consider using focus_xyxy or focal_point to zoom into specific regions for better detail recognition and reduced token usage.`;
-    }
-
-    // Return both text and image content
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(resultMetadata)
-        },
-        {
-          type: "image",
-          data: base64,
-          mimeType: mimeType
-        }
-      ]
-    };
+    return await processImageBuffer({
+      imageBuffer,
+      format,
+      mimeType,
+      focus_xyxy: params.focus_xyxy,
+      focal_point: params.focal_point
+    });
   } catch (error: unknown) {
     console.error('Error processing image file:', error);
     return {
@@ -350,9 +367,8 @@ export async function extractImageFromFile(params: ExtractImageFromFileParams): 
 // Extract image from URL
 export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Promise<McpToolResponse> {
   try {
-    const { url, resize, max_width, max_height } = params;
+    const { url } = params;
 
-    // Validate URL
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       return {
         content: [{ type: "text", text: "Error: URL must start with http:// or https://" }],
@@ -360,108 +376,30 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
       };
     }
 
-    // Domain validation if ALLOWED_DOMAINS is set
-    if (ALLOWED_DOMAINS.length > 0) {
-      const urlObj = new URL(url);
-      const domain = urlObj.hostname;
-      const isAllowed = ALLOWED_DOMAINS.some((allowedDomain: string) =>
-        domain === allowedDomain || domain.endsWith(`.${allowedDomain}`)
-      );
-
-      if (!isAllowed) {
-        return {
-          content: [{ type: "text", text: `Error: Domain ${domain} is not in the allowed domains list` }],
-          isError: true
-        };
-      }
+    const domainError = validateDomain(url);
+    if (domainError) {
+      return {
+        content: [{ type: "text", text: domainError }],
+        isError: true
+      };
     }
 
-    // Fetch the image
     const response = await axios.get(url, {
       responseType: 'arraybuffer',
       maxContentLength: MAX_IMAGE_SIZE,
     });
 
-    // Process the image
-    let imageBuffer = Buffer.from(response.data);
-    let metadata = await sharp(imageBuffer).metadata();
-    
-    // Track original dimensions for info message
-    const originalWidth = metadata.width || 0;
-    const originalHeight = metadata.height || 0;
-    const originalPixels = originalWidth * originalHeight;
-    const hasFocus = !!(params.focus_xyxy || params.focal_point);
-
-    // Apply focus if requested
-    const focusedBuffer = await applyImageFocus(imageBuffer, metadata, params.focus_xyxy, params.focal_point);
-    if (focusedBuffer) {
-      imageBuffer = focusedBuffer;
-      metadata = await sharp(imageBuffer).metadata();
-    }
-
-    // Always resize to ensure the base64 representation is reasonable
-    // This will help avoid consuming too much of the context window
-    if (metadata.width && metadata.height) {
-      // Use provided dimensions or fallback to defaults for optimal LLM context usage
-      const targetWidth = Math.min(metadata.width, DEFAULT_MAX_WIDTH);
-      const targetHeight = Math.min(metadata.height, DEFAULT_MAX_HEIGHT);
-
-      // Only resize if needed
-      if (metadata.width > targetWidth || metadata.height > targetHeight) {
-        imageBuffer = await sharp(imageBuffer)
-          .resize({
-            width: targetWidth,
-            height: targetHeight,
-            fit: 'inside',
-            withoutEnlargement: true
-          })
-          .toBuffer();
-
-        // Update metadata after resize
-        metadata = await sharp(imageBuffer).metadata();
-      }
-    }
-
-    // Compress the image based on its format
-    try {
-      const format = metadata.format || 'jpeg';
-      imageBuffer = await compressImage(imageBuffer, format);
-    } catch (compressionError) {
-      console.warn('Compression warning, using original image:', compressionError);
-      // Continue with the original image if compression fails
-    }
-
-    // Convert to base64
-    const base64 = imageBuffer.toString('base64');
+    const imageBuffer = Buffer.from(response.data);
     const mimeType = response.headers['content-type'] || 'image/jpeg';
+    const format = (await sharp(imageBuffer).metadata()).format || 'jpeg';
 
-    // Prepare metadata with optional info message
-    const resultMetadata: any = {
-      width: metadata.width,
-      height: metadata.height,
-      format: metadata.format,
-      size: imageBuffer.length
-    };
-    
-    // Add info message for large images without focus
-    if (originalPixels > 300000 && !hasFocus) {
-      resultMetadata.info = `Large image detected (${originalWidth}x${originalHeight} = ${originalPixels.toLocaleString()} pixels). Consider using focus_xyxy or focal_point to zoom into specific regions for better detail recognition and reduced token usage.`;
-    }
-
-    // Return both text and image content
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(resultMetadata)
-        },
-        {
-          type: "image",
-          data: base64,
-          mimeType: mimeType
-        }
-      ]
-    };
+    return await processImageBuffer({
+      imageBuffer,
+      format,
+      mimeType,
+      focus_xyxy: params.focus_xyxy,
+      focal_point: params.focal_point
+    });
   } catch (error: unknown) {
     console.error('Error processing image from URL:', error);
     return {
@@ -474,14 +412,12 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
 // Extract image from base64
 export async function extractImageFromBase64(params: ExtractImageFromBase64Params): Promise<McpToolResponse> {
   try {
-    const { base64, mime_type, resize, max_width, max_height } = params;
+    const { base64, mime_type } = params;
 
-    // Decode base64
     let imageBuffer;
     try {
       imageBuffer = Buffer.from(base64, 'base64');
 
-      // Quick validation - valid base64 strings should be decodable
       if (imageBuffer.length === 0) {
         throw new Error("Invalid base64 string - decoded to empty buffer");
       }
@@ -492,7 +428,6 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
       };
     }
 
-    // Check size
     if (imageBuffer.length > MAX_IMAGE_SIZE) {
       return {
         content: [{ type: "text", text: `Error: Image size exceeds maximum allowed size of ${MAX_IMAGE_SIZE} bytes` }],
@@ -500,7 +435,6 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
       };
     }
 
-    // Process the image
     let metadata;
     try {
       metadata = await sharp(imageBuffer).metadata();
@@ -510,82 +444,16 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
         isError: true
       };
     }
-    
-    // Track original dimensions for info message
-    const originalWidth = metadata.width || 0;
-    const originalHeight = metadata.height || 0;
-    const originalPixels = originalWidth * originalHeight;
-    const hasFocus = !!(params.focus_xyxy || params.focal_point);
 
-    // Apply focus if requested
-    const focusedBuffer = await applyImageFocus(imageBuffer, metadata, params.focus_xyxy, params.focal_point);
-    if (focusedBuffer) {
-      imageBuffer = focusedBuffer;
-      metadata = await sharp(imageBuffer).metadata();
-    }
+    const format = metadata.format || mime_type.split('/')[1] || 'jpeg';
 
-    // Always resize to ensure the base64 representation is reasonable
-    // This will help avoid consuming too much of the context window
-    if (metadata.width && metadata.height) {
-      // Use provided dimensions or fallback to defaults for optimal LLM context usage
-      const targetWidth = Math.min(metadata.width, DEFAULT_MAX_WIDTH);
-      const targetHeight = Math.min(metadata.height, DEFAULT_MAX_HEIGHT);
-
-      // Only resize if needed
-      if (metadata.width > targetWidth || metadata.height > targetHeight) {
-        imageBuffer = await sharp(imageBuffer)
-          .resize({
-            width: targetWidth,
-            height: targetHeight,
-            fit: 'inside',
-            withoutEnlargement: true
-          })
-          .toBuffer();
-
-        // Update metadata after resize
-        metadata = await sharp(imageBuffer).metadata();
-      }
-    }
-
-    // Compress the image based on its format
-    try {
-      const format = metadata.format || mime_type.split('/')[1] || 'jpeg';
-      imageBuffer = await compressImage(imageBuffer, format);
-    } catch (compressionError) {
-      console.warn('Compression warning, using original image:', compressionError);
-      // Continue with the original image if compression fails
-    }
-
-    // Convert back to base64
-    const processedBase64 = imageBuffer.toString('base64');
-
-    // Prepare metadata with optional info message
-    const resultMetadata: any = {
-      width: metadata.width,
-      height: metadata.height,
-      format: metadata.format,
-      size: imageBuffer.length
-    };
-    
-    // Add info message for large images without focus
-    if (originalPixels > 300000 && !hasFocus) {
-      resultMetadata.info = `Large image detected (${originalWidth}x${originalHeight} = ${originalPixels.toLocaleString()} pixels). Consider using focus_xyxy or focal_point to zoom into specific regions for better detail recognition and reduced token usage.`;
-    }
-
-    // Return both text and image content
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(resultMetadata)
-        },
-        {
-          type: "image",
-          data: processedBase64,
-          mimeType: mime_type
-        }
-      ]
-    };
+    return await processImageBuffer({
+      imageBuffer,
+      format,
+      mimeType: mime_type,
+      focus_xyxy: params.focus_xyxy,
+      focal_point: params.focal_point
+    });
   } catch (error: unknown) {
     console.error('Error processing base64 image:', error);
     return {
@@ -593,4 +461,4 @@ export async function extractImageFromBase64(params: ExtractImageFromBase64Param
       isError: true
     };
   }
-} 
+}
