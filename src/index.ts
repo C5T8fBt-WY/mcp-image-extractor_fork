@@ -15,6 +15,7 @@ import {
   extractPdfFromUrl,
   extractPdfFromBase64
 } from './pdf-utils';
+import { readVisual } from './read-visual';
 
 dotenv.config();
 
@@ -141,6 +142,23 @@ server.tool(
   },
   async (args, extra) => {
     return await extractPdfFromBase64(args);
+  }
+);
+
+// Add unified read_visual tool (recommended - auto-detects file/URL/base64 and image/PDF)
+server.tool(
+  "read_visual",
+  "Analyze visual content from any source: local files, URLs, or base64 data. Automatically detects source type and content format (images or PDFs). For PDFs, renders the specified page as a high-quality image. Returns image data suitable for LLM visual analysis, OCR, and object recognition. Use focus_xyxy or focal_point to crop specific regions for detail or to reduce token usage.",
+  {
+    source: z.string().describe("The visual content source. Can be: 1) A local file path (e.g., 'C:\\images\\photo.png' or '/home/user/doc.pdf'), 2) A URL (e.g., 'https://example.com/image.jpg'), or 3) Base64-encoded data (raw base64 string or data URL like 'data:image/png;base64,...'). Automatically detects PDFs by extension, content-type, or magic bytes."),
+    page: z.number().int().min(1).default(1).optional().describe("For PDFs only: page number to render (1-indexed, default: 1). Ignored for images."),
+    dpi: z.number().int().min(72).max(600).default(150).optional().describe("For PDFs only: rendering resolution in DPI (default: 150). Higher values produce sharper text but larger images. Ignored for images."),
+    focus_xyxy: z.array(z.number()).optional().describe("Optional focus rectangle [x1, y1, x2, y2]. Can be pixel coordinates (integers) or ratios (0.0-1.0). Useful for cropping to a specific region of interest."),
+    focal_point: z.array(z.number()).optional().describe("Optional focal point [centerX, centerY, halfWidth, halfHeight]. Can be pixel coordinates (integers) or ratios (0.0-1.0). Useful for focusing on a specific area."),
+    mime_type: z.string().default("image/png").optional().describe("Hint for raw base64 data when auto-detection fails. Examples: 'image/png', 'image/jpeg', 'application/pdf'. Usually not needed as format is auto-detected.")
+  },
+  async (args, extra) => {
+    return await readVisual(args);
   }
 );
 
