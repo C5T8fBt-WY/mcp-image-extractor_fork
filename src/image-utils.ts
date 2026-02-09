@@ -263,7 +263,6 @@ export async function processImageBuffer(params: ProcessImageBufferParams): Prom
   // Track original dimensions for info message
   const originalWidth = metadata.width || 0;
   const originalHeight = metadata.height || 0;
-  const originalPixels = originalWidth * originalHeight;
   const hasFocus = !!(params.focus_xyxy || params.focal_point);
 
   // Apply focus if requested
@@ -272,6 +271,11 @@ export async function processImageBuffer(params: ProcessImageBufferParams): Prom
     imageBuffer = focusedBuffer;
     metadata = await sharp(imageBuffer).metadata();
   }
+
+  // Track post-focus dimensions (what actually gets sent to LLM)
+  const preLlmWidth = metadata.width || 0;
+  const preLlmHeight = metadata.height || 0;
+  const preLlmPixels = preLlmWidth * preLlmHeight;
 
   // Resize to optimal dimensions for LLM context
   if (metadata.width && metadata.height) {
@@ -311,9 +315,14 @@ export async function processImageBuffer(params: ProcessImageBufferParams): Prom
     ...params.extraMetadata
   };
 
-  // Add info message for large images without focus
-  if (originalPixels > 300000 && !hasFocus) {
-    resultMetadata.info = `Large image detected (${originalWidth}x${originalHeight} = ${originalPixels.toLocaleString()} pixels). Consider using focus_xyxy or focal_point to zoom into specific regions for better detail recognition and reduced token usage.`;
+  // Warn about large images that will lose detail when downscaled
+  const LARGE_IMAGE_THRESHOLD = 300000; // pixels
+  if (preLlmPixels > LARGE_IMAGE_THRESHOLD) {
+    if (!hasFocus) {
+      resultMetadata.info = `Large image detected (${originalWidth}x${originalHeight} = ${(originalWidth * originalHeight).toLocaleString()} pixels). It was downscaled to ${metadata.width}x${metadata.height} for LLM context, which loses detail. Consider using focus_xyxy or focal_point to zoom into specific regions for better detail recognition and reduced token usage.`;
+    } else {
+      resultMetadata.info = `Large focus region (${preLlmWidth}x${preLlmHeight} = ${preLlmPixels.toLocaleString()} pixels from original ${originalWidth}x${originalHeight}). It was downscaled to ${metadata.width}x${metadata.height} for LLM context. Consider narrowing focus_xyxy or focal_point to a smaller region for better detail recognition.`;
+    }
   }
 
   return {
