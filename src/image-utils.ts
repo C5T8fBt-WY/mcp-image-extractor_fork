@@ -50,16 +50,6 @@ export type ExtractImageFromUrlParams = {
   focal_point?: number[];
 };
 
-export type ExtractImageFromBase64Params = {
-  base64: string;
-  mime_type: string;
-  resize: boolean;
-  max_width: number;
-  max_height: number;
-  focus_xyxy?: number[];
-  focal_point?: number[];
-};
-
 export type ProcessImageBufferParams = {
   imageBuffer: Buffer;
   format: string;
@@ -418,56 +408,3 @@ export async function extractImageFromUrl(params: ExtractImageFromUrlParams): Pr
   }
 }
 
-// Extract image from base64
-export async function extractImageFromBase64(params: ExtractImageFromBase64Params): Promise<McpToolResponse> {
-  try {
-    const { base64, mime_type } = params;
-
-    let imageBuffer;
-    try {
-      imageBuffer = Buffer.from(base64, 'base64');
-
-      if (imageBuffer.length === 0) {
-        throw new Error("Invalid base64 string - decoded to empty buffer");
-      }
-    } catch (e) {
-      return {
-        content: [{ type: "text", text: `Error: Invalid base64 string - ${e instanceof Error ? e.message : String(e)}` }],
-        isError: true
-      };
-    }
-
-    if (imageBuffer.length > MAX_IMAGE_SIZE) {
-      return {
-        content: [{ type: "text", text: `Error: Image size exceeds maximum allowed size of ${MAX_IMAGE_SIZE} bytes` }],
-        isError: true
-      };
-    }
-
-    let metadata;
-    try {
-      metadata = await sharp(imageBuffer).metadata();
-    } catch (e) {
-      return {
-        content: [{ type: "text", text: `Error: Could not process image data - ${e instanceof Error ? e.message : String(e)}` }],
-        isError: true
-      };
-    }
-
-    const format = metadata.format || mime_type.split('/')[1] || 'jpeg';
-
-    return await processImageBuffer({
-      imageBuffer,
-      format,
-      mimeType: mime_type,
-      focus_xyxy: params.focus_xyxy,
-      focal_point: params.focal_point
-    });
-  } catch (error: unknown) {
-    console.error('Error processing base64 image:', error);
-    return {
-      content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
-      isError: true
-    };
-  }
-}

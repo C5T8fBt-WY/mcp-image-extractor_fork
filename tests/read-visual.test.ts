@@ -21,11 +21,6 @@ describe('read-visual', () => {
             expect(detectSourceType('https://example.com/image.pdf')).toBe('url');
         });
 
-        it('should detect data URLs as base64', () => {
-            expect(detectSourceType('data:image/png;base64,iVBORw0KGgo=')).toBe('base64');
-            expect(detectSourceType('data:application/pdf;base64,JVBERi0=')).toBe('base64');
-        });
-
         it('should detect Windows absolute paths', () => {
             // Mock fs.existsSync to return true for path detection tests
             (fs.existsSync as jest.Mock).mockReturnValue(true);
@@ -43,12 +38,6 @@ describe('read-visual', () => {
             (fs.existsSync as jest.Mock).mockReturnValue(true);
             expect(detectSourceType('./test.png')).toBe('file');
             expect(detectSourceType('../folder/doc.pdf')).toBe('file');
-        });
-
-        it('should detect raw base64 strings', () => {
-            // Long base64 string (must be >= 100 chars for base64 detection)
-            const longBase64 = 'YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ==';
-            expect(detectSourceType(longBase64)).toBe('base64');
         });
 
         it('should fallback to file for unknown patterns', () => {
@@ -80,15 +69,6 @@ describe('read-visual', () => {
             // ftp:// is not http/https, so it will be treated as a file path
             // and will error because file doesn't exist
             expect(result.isError).toBe(true);
-        });
-
-        it('should return error for invalid data URL', async () => {
-            const result = await readVisual({
-                source: 'data:invalid-format'
-            });
-
-            expect(result.isError).toBe(true);
-            expect(result.content[0].text).toContain('Error');
         });
 
         it('should accept valid page parameter', async () => {

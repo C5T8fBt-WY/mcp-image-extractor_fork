@@ -44,7 +44,7 @@ function asBuffer(data: Buffer | Uint8Array | ArrayBuffer): Buffer {
 }
 
 // Source type detection
-export type SourceType = 'url' | 'file' | 'base64';
+export type SourceType = 'url' | 'file';
 
 /**
  * Detect the type of source input
@@ -53,11 +53,6 @@ export function detectSourceType(source: string): SourceType {
     // URL detection
     if (source.startsWith('http://') || source.startsWith('https://')) {
         return 'url';
-    }
-
-    // Data URL detection (base64 encoded)
-    if (source.startsWith('data:')) {
-        return 'base64';
     }
 
     // Check if it's a valid file path that exists
@@ -69,11 +64,6 @@ export function detectSourceType(source: string): SourceType {
         // If it looks like a file path but doesn't exist, still treat as file
         // to provide a better error message
         return 'file';
-    }
-
-    // Check if it's valid base64
-    if (isValidBase64(source)) {
-        return 'base64';
     }
 
     // Default to file (will error if not found)
@@ -103,20 +93,6 @@ function isFilePath(str: string): boolean {
 }
 
 /**
- * Check if a string is valid base64
- */
-function isValidBase64(str: string): boolean {
-    // Must be reasonably long for image data
-    if (str.length < 100) return false;
-
-    // Clean and validate
-    const b64 = str.replace(/\s+/g, '');
-    if (b64.length % 4 !== 0) return false;
-
-    return /^[A-Za-z0-9+/]+={0,2}$/.test(b64);
-}
-
-/**
  * Check if content is a PDF (by magic bytes or extension)
  */
 function isPdf(buffer: Buffer): boolean {
@@ -132,15 +108,6 @@ function isPdfByMimeType(mimeType: string): boolean {
     return mimeType === 'application/pdf' || mimeType.includes('pdf');
 }
 
-/**
- * Parse data URL into components
- */
-function parseDataUrl(dataUrl: string): { mimeType: string; base64: string } | null {
-    const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-    if (!match) return null;
-    return { mimeType: match[1], base64: match[2] };
-}
-
 // Unified parameters type
 export type ReadVisualParams = {
     source: string;
@@ -148,7 +115,6 @@ export type ReadVisualParams = {
     dpi?: number;           // For PDFs only (default: 150)
     focus_xyxy?: number[];
     focal_point?: number[];
-    mime_type?: string;     // Hint for raw base64 when auto-detection fails
 };
 
 /**
@@ -222,7 +188,7 @@ async function processImage(
 }
 
 /**
- * Unified read_visual function - handles files, URLs, and base64 data
+ * Unified read_visual function - handles files and URLs
  * Automatically detects PDFs vs images
  */
 export async function readVisual(params: ReadVisualParams): Promise<McpToolResponse> {
@@ -236,9 +202,6 @@ export async function readVisual(params: ReadVisualParams): Promise<McpToolRespo
 
             case 'url':
                 return await handleUrl(params);
-
-            case 'base64':
-                return await handleBase64(params);
 
             default:
                 return {
@@ -334,69 +297,3 @@ async function handleUrl(params: ReadVisualParams): Promise<McpToolResponse> {
     return await processImage(contentBuffer, format, mimeType, params);
 }
 
-/**
- * Handle base64 source (raw or data URL)
- */
-async function handleBase64(params: ReadVisualParams): Promise<McpToolResponse> {
-    const { source } = params;
-    let base64Data: string;
-    let mimeType = params.mime_type || 'image/png';
-
-    // Check if it's a data URL
-    if (source.startsWith('data:')) {
-        const parsed = parseDataUrl(source);
-        if (!parsed) {
-            return {
-                content: [{ type: "text", text: 'Error: Invalid data URL format' }],
-                isError: true
-            };
-        }
-        base64Data = parsed.base64;
-        mimeType = parsed.mimeType;
-    } else {
-        // Raw base64
-        base64Data = source.replace(/\s+/g, '');
-    }
-
-    // Validate base64
-    if (!isValidBase64(base64Data)) {
-        return {
-            content: [{ type: "text", text: 'Error: Invalid base64 string' }],
-            isError: true
-        };
-    }
-
-    const contentBuffer = Buffer.from(base64Data, 'base64');
-
-    if (contentBuffer.length === 0) {
-        return {
-            content: [{ type: "text", text: 'Error: Invalid base64 string - decoded to empty buffer' }],
-            isError: true
-        };
-    }
-
-    if (contentBuffer.length > MAX_IMAGE_SIZE) {
-        return {
-            content: [{ type: "text", text: `Error: Content size exceeds maximum allowed size of ${MAX_IMAGE_SIZE} bytes` }],
-            isError: true
-        };
-    }
-
-    // Check if PDF
-    if (isPdfByMimeType(mimeType) || isPdf(contentBuffer)) {
-        // Convert to data URL for pdf-to-img
-        const dataUrl = `data:application/pdf;base64,${base64Data}`;
-        return await processPdf(dataUrl, params);
-    }
-
-    // Process as image
-    let format: string;
-    try {
-        const metadata = await sharp(contentBuffer).metadata();
-        format = metadata.format || mimeType.split('/')[1] || 'jpeg';
-    } catch {
-        format = mimeType.split('/')[1] || 'jpeg';
-    }
-
-    return await processImage(contentBuffer, format, mimeType, params);
-}

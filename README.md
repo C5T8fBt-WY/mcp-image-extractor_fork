@@ -1,6 +1,6 @@
 # MCP Image Extractor (Enhanced Fork)
 
-Enhanced MCP server for extracting and converting images to base64 for LLM analysis with **configurable quality settings**.
+Enhanced MCP server for extracting and analyzing images and PDFs from files and URLs for LLM analysis with **configurable quality settings**.
 
 ## What's New in This Fork
 
@@ -14,8 +14,7 @@ Enhanced MCP server for extracting and converting images to base64 for LLM analy
 
 This MCP server provides tools for AI assistants to:
 - Extract images from local files
-- Extract images from URLs  
-- Process base64-encoded images
+- Extract images from URLs
 - **NEW**: Focus on specific image regions (`focus_xyxy`, `focal_point`)
 - **NEW**: Configurable dimensions (512×512 to 1568×1568)
 - **NEW**: Adjustable compression quality
@@ -152,16 +151,6 @@ What's in this image? https://example.com/chart.png
 Focus on the legend in bottom-left:
 focus_xyxy: [0, 0.75, 0.3, 1]
 ```
-
-### extract_image_from_base64
-
-Process base64-encoded images.
-
-**Parameters:**
-- `base64` (required): Base64-encoded image data
-- `mime_type` (optional, default: "image/png"): MIME type
-- `focus_xyxy` (optional): Rectangle `[x1, y1, x2, y2]` - pixels (int) or ratio (0.0-1.0)
-- `focal_point` (optional): Center region `[centerX, centerY, halfWidth, halfHeight]` - pixels (int) or ratio (0.0-1.0)
 
 ## Use Cases
 

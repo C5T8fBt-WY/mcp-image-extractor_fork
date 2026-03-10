@@ -42,17 +42,6 @@ function asBuffer(data: Buffer | Uint8Array | ArrayBuffer): Buffer {
   return Buffer.from(data);
 }
 
-function cleanBase64(base64: string): string {
-  return base64.replace(/\s+/g, '');
-}
-
-function isValidBase64(base64: string): boolean {
-  const b64 = cleanBase64(base64);
-  if (b64.length === 0) return false;
-  if (b64.length % 4 !== 0) return false;
-  return /^[A-Za-z0-9+/]+={0,2}$/.test(b64);
-}
-
 async function renderPdfPageFromInput(
   input: string,
   pageNum: number
@@ -86,16 +75,6 @@ export type ExtractPdfFromFileParams = {
 
 export type ExtractPdfFromUrlParams = {
   url: string;
-  page: number;
-  resize: boolean;
-  max_width: number;
-  max_height: number;
-  focus_xyxy?: number[];
-  focal_point?: number[];
-};
-
-export type ExtractPdfFromBase64Params = {
-  base64: string;
   page: number;
   resize: boolean;
   max_width: number;
@@ -209,55 +188,3 @@ export async function extractPdfFromUrl(params: ExtractPdfFromUrlParams): Promis
   }
 }
 
-// Extract a page from a base64-encoded PDF
-export async function extractPdfFromBase64(params: ExtractPdfFromBase64Params): Promise<McpToolResponse> {
-  try {
-    const { base64, page } = params;
-
-    if (!isValidBase64(base64)) {
-      return {
-        content: [{ type: "text", text: 'Error: Invalid base64 string' }],
-        isError: true
-      };
-    }
-
-    const base64Clean = cleanBase64(base64);
-    const pdfBuffer = Buffer.from(base64Clean, 'base64');
-    if (pdfBuffer.length === 0) {
-      return {
-        content: [{ type: "text", text: 'Error: Invalid base64 string - decoded to empty buffer' }],
-        isError: true
-      };
-    }
-
-    if (pdfBuffer.length > MAX_IMAGE_SIZE) {
-      return {
-        content: [{ type: "text", text: `Error: PDF size exceeds maximum allowed size of ${MAX_IMAGE_SIZE} bytes` }],
-        isError: true
-      };
-    }
-
-    const dataUrl = `data:application/pdf;base64,${base64Clean}`;
-    const { pngBuffer, pageCount } = await renderPdfPageFromInput(dataUrl, page);
-
-    return await processImageBuffer({
-      imageBuffer: pngBuffer,
-      format: 'png',
-      mimeType: 'image/png',
-      focus_xyxy: params.focus_xyxy,
-      focal_point: params.focal_point,
-      extraMetadata: {
-        source: 'pdf',
-        page,
-        totalPages: pageCount,
-        dpi: PDF_DPI
-      }
-    });
-  } catch (error: unknown) {
-    console.error('Error processing base64 PDF:', error);
-    return {
-      content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
-      isError: true
-    };
-  }
-}
