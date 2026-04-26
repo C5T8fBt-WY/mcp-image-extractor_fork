@@ -306,10 +306,10 @@ export async function processImageBuffer(params: ProcessImageBufferParams): Prom
   };
 
   // Warn about large images that will lose detail when downscaled
-  const LARGE_IMAGE_THRESHOLD = 300000; // pixels
+  const LARGE_IMAGE_THRESHOLD = 600000; // pixels
   if (preLlmPixels > LARGE_IMAGE_THRESHOLD) {
     if (!hasFocus) {
-      resultMetadata.info = `Large image detected (${originalWidth}x${originalHeight} = ${(originalWidth * originalHeight).toLocaleString()} pixels). It was downscaled to ${metadata.width}x${metadata.height} for LLM context, which loses detail. Consider using focus_xyxy or focal_point to zoom into specific regions for better detail recognition and reduced token usage.`;
+      resultMetadata.info = `Large image detected (${originalWidth}x${originalHeight} = ${(originalWidth * originalHeight).toLocaleString()} pixels). It was downscaled to ${metadata.width}x${metadata.height} for LLM context, which loses detail. Consider using focus_xyxy or focal_point arguments of this tool to zoom into specific regions for better detail recognition.`;
     } else {
       resultMetadata.info = `Large focus region (${preLlmWidth}x${preLlmHeight} = ${preLlmPixels.toLocaleString()} pixels from original ${originalWidth}x${originalHeight}). It was downscaled to ${metadata.width}x${metadata.height} for LLM context. Consider narrowing focus_xyxy or focal_point to a smaller region for better detail recognition.`;
     }
