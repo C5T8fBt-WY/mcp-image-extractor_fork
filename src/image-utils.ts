@@ -309,9 +309,9 @@ export async function processImageBuffer(params: ProcessImageBufferParams): Prom
   const LARGE_IMAGE_THRESHOLD = 600000; // pixels
   if (preLlmPixels > LARGE_IMAGE_THRESHOLD) {
     if (!hasFocus) {
-      resultMetadata.info = `Large image detected (${originalWidth}x${originalHeight} = ${(originalWidth * originalHeight).toLocaleString()} pixels). It was downscaled to ${metadata.width}x${metadata.height} for LLM context, which loses detail. Consider using focus_xyxy or focal_point arguments of this tool to zoom into specific regions for better detail recognition.`;
+      resultMetadata.info = `Large image detected (${originalWidth}x${originalHeight} = ${(originalWidth * originalHeight).toLocaleString()} pixels). It was downscaled to ${metadata.width}x${metadata.height} for LLM context, which loses detail. Don't assume you understand the details of the image; strongly recommend retrying with focus_xyxy or focal_point arguments of this tool to zoom into specific regions for better detail recognition.`;
     } else {
-      resultMetadata.info = `Large focus region (${preLlmWidth}x${preLlmHeight} = ${preLlmPixels.toLocaleString()} pixels from original ${originalWidth}x${originalHeight}). It was downscaled to ${metadata.width}x${metadata.height} for LLM context. Consider narrowing focus_xyxy or focal_point to a smaller region for better detail recognition.`;
+      resultMetadata.info = `Large focus region (${preLlmWidth}x${preLlmHeight} = ${preLlmPixels.toLocaleString()} pixels from original ${originalWidth}x${originalHeight}). It was downscaled to ${metadata.width}x${metadata.height} for LLM context. Don't assume you understand the details of the image; strongly recommend retrying with a narrower focus_xyxy or focal_point to a smaller region for better detail recognition.`;
     }
   }
 

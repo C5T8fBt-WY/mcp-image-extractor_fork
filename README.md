@@ -186,6 +186,76 @@ With focal_point: [0.5, 0.3, 0.1, 0.1] to zoom into that specific widget
 | Balanced      | 768×432    | ~2,100        | Charts & diagrams    |
 | Maximum       | 1568×882   | ~8,000        | Detailed screenshots |
 
+## Using with VS Code Remote SSH
+
+When connected to a remote machine via VS Code Remote SSH, MCP servers configured
+in your **user profile** (`MCP: Open User Configuration`) run **locally** — they cannot
+access files on the remote machine.
+
+To make the server run on the remote machine (so it can read remote file paths), put the
+config in either:
+
+### Option 1: Workspace settings (recommended, shareable)
+
+Create or edit `.vscode/mcp.json` in your project root on the remote machine:
+
+```json
+{
+  "servers": {
+    "image-extractor": {
+      "command": "npx",
+      "args": ["-y", "@c5t8fbt-wy/mcp-image-extractor"],
+      "env": {
+        "DEFAULT_MAX_WIDTH": "1024",
+        "COMPRESSION_QUALITY": "90"
+      }
+    }
+  }
+}
+```
+
+VS Code will spawn this process on the remote host when you are connected via SSH.
+No tunnels or HTTP setup required — just add the config and click Start.
+
+### Option 2: Remote user settings (per-user, all remote workspaces)
+
+Run `MCP: Open Remote User Configuration` from the Command Palette while connected
+to the remote. Add the same JSON as above. This applies to all workspaces on that
+remote host for your user account.
+
+### Why this works
+
+VS Code runs MCP servers wherever they are configured:
+
+| Config location | Where the process runs |
+|---|---|
+| User profile (`MCP: Open User Configuration`) | Local machine |
+| Workspace `.vscode/mcp.json` | Remote machine (when SSH-connected) |
+| Remote user settings (`MCP: Open Remote User Configuration`) | Remote machine |
+
+### HTTP/SSE mode (always-on / Docker)
+
+For Docker containers or always-on server deployments, set `MCP_HTTP_PORT` to enable
+an HTTP server instead of stdio:
+
+```bash
+MCP_HTTP_PORT=3100 node dist/index.js
+```
+
+Then configure VS Code to connect via URL:
+```json
+{
+  "servers": {
+    "image-extractor": {
+      "type": "sse",
+      "url": "http://localhost:3100/sse"
+    }
+  }
+}
+```
+
+Endpoints: `/sse` (SSE stream), `/messages` (POST), `/health` (status check).
+
 ## Troubleshooting
 
 ### "maxContentLength exceeded" Error
@@ -244,6 +314,8 @@ npm publish
 | Configurable dimensions | ❌        | ✅             |
 | Configurable quality    | ❌        | ✅             |
 | Environment vars        | Limited  | Full          |
+| HTTP/SSE transport      | ❌        | ✅ (`MCP_HTTP_PORT`) |
+| Remote SSH docs         | ❌        | ✅             |
 | Documentation           | Basic    | Comprehensive |
 
 ## Development
